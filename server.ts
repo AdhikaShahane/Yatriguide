@@ -5,17 +5,32 @@ import fs from 'fs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import {
+  hashPassword,
+  signAuthToken,
+  verifyAuthToken,
+  verifyPassword,
+  type AuthUser,
+} from './server/auth.ts';
+import {
   db,
   getBookingByPnrOrEmail,
   getCircuitDetail,
+  getTempleById,
+  listBookingsForUser,
   listCircuits,
   listRecentBookings,
+  listTemples,
 } from './server/db.ts';
 import { dispatchTicketEmail } from './server/email.ts';
+import {
+  askGroundedCompanion,
+  generateGroundedPilgrimagePlan,
+} from './server/gemini.ts';
 import type {
   ItineraryDay,
   LiveFeedEvent,
   PackageTier,
+  PilgrimCareMode,
   TrainClassOption,
 } from './src/types/pilgrimage.ts';
 
@@ -81,7 +96,7 @@ app.get('/api/live-stream', (req, res) => {
   const initEvent: LiveFeedEvent = {
     id: crypto.randomUUID(),
     type: 'HEARTBEAT',
-    message: 'Connected to TeerthSutra Live Darshan & Rail Desk',
+    message: 'Connected to Yatriguide Live Darshan & Rail Desk',
     timestamp: new Date().toISOString(),
   };
   res.write(`data: ${JSON.stringify(initEvent)}\n\n`);
@@ -137,6 +152,233 @@ app.get('/api/circuits/:id', (req, res) => {
   res.json(detail);
 });
 
+app.get('/api/temples', (_req, res) => {
+  res.json({ temples: listTemples() });
+});
+
+app.get('/api/temples/:id', (req, res) => {
+  const templeId = String(req.params.id || '').trim();
+  const temple = getTempleById(templeId);
+  if (!temple) {
+    res.status(404).json({ error: 'Verified temple record not found.' });
+    return;
+  }
+  res.json({ temple });
+});
+
+app.post('/api/planner/generate', async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const startingLocation = String(body.starting_location || '').trim().slice(0, 100);
+    const destination = String(body.destination || '').trim().slice(0, 120);
+    const travellers = Math.min(20, Math.max(1, Number(body.travellers || 2)));
+    const travelDate = String(body.travel_date || '2026-12-10').trim().slice(0, 20);
+    const budgetInr = Math.min(1000000, Math.max(1500, Number(body.budget_inr || 15000)));
+    const days = Math.min(14, Math.max(1, Number(body.days || 3)));
+    const traditionInterest = String(body.tradition_interest || 'Hindu & Sacred Indian Shrines').trim().slice(0, 120);
+    const specialRequirements = String(body.special_requirements || '').trim().slice(0, 240);
+    const careModeRaw = String(body.care_mode || 'ELDERLY_CARE').toUpperCase();
+    const careMode: PilgrimCareMode = ['SOLO_YOUTH', 'ELDERLY_CARE', 'FAMILY_KIDS'].includes(careModeRaw)
+      ? (careModeRaw as PilgrimCareMode)
+      : 'ELDERLY_CARE';
+
+    if (startingLocation.length < 2 || destination.length < 2) {
+      res.status(400).json({ error: 'Please provide both a starting city and a pilgrimage destination.' });
+      return;
+    }
+
+    const plan = await generateGroundedPilgrimagePlan(
+      {
+        startingLocation,
+        destination,
+        travellers,
+        travelDate,
+        budgetInr,
+        days,
+        traditionInterest,
+        specialRequirements,
+        careMode,
+      },
+      listTemples(),
+      listCircuits()
+    );
+
+    res.json({ plan });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'GEMINI_KEY_MISSING') {
+      res.status(503).json({
+        error: 'Gemini API key is not configured. Check Settings > Secrets for GEMINI_API_KEY.',
+      });
+      return;
+    }
+    console.error('Planner generation error:', err);
+    res.status(500).json({
+      error: 'Unable to generate pilgrimage plan right now. Verify GEMINI_API_KEY or try again.',
+    });
+  }
+});
+
+app.post('/api/companion/ask', async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const question = String(body.question || '').trim().slice(0, 500);
+    const templeId = body.temple_id ? String(body.temple_id).trim() : '';
+    const careModeRaw = String(body.care_mode || 'FAMILY_KIDS').toUpperCase();
+    const careMode: PilgrimCareMode = ['SOLO_YOUTH', 'ELDERLY_CARE', 'FAMILY_KIDS'].includes(careModeRaw)
+      ? (careModeRaw as PilgrimCareMode)
+      : 'FAMILY_KIDS';
+
+    if (question.length < 3) {
+      res.status(400).json({ error: 'Ask a specific question about darshan timings, rituals, accessibility, or significance.' });
+      return;
+    }
+
+    const focusedTemple = templeId ? getTempleById(templeId) : null;
+    const result = await askGroundedCompanion(
+      question,
+      careMode,
+      focusedTemple,
+      listTemples()
+    );
+
+    res.json(result);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'GEMINI_KEY_MISSING') {
+      res.status(503).json({
+        error: 'Gemini API key is not configured. Check Settings > Secrets for GEMINI_API_KEY.',
+      });
+      return;
+    }
+    console.error('Companion ask error:', err);
+    res.status(500).json({
+      error: 'Yatra Companion could not answer right now. Verify GEMINI_API_KEY in Settings > Secrets.',
+    });
+  }
+});
+
+function getAuthUserFromRequest(req: express.Request): AuthUser | null {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return null;
+  const token = header.slice(7).trim();
+  const payload = verifyAuthToken(token);
+  if (!payload) return null;
+
+  const row = db
+    .prepare('SELECT id, full_name, email, phone, care_mode FROM users WHERE id = ?')
+    .get(payload.sub) as Record<string, unknown> | undefined;
+
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    full_name: String(row.full_name),
+    email: String(row.email),
+    phone: String(row.phone),
+    care_mode: row.care_mode as PilgrimCareMode,
+  };
+}
+
+app.post('/api/auth/signup', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const fullName = String(body.full_name || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const phone = String(body.phone || '').trim();
+    const password = String(body.password || '');
+    const careModeRaw = String(body.care_mode || 'ELDERLY_CARE').toUpperCase();
+    const careMode: PilgrimCareMode = ['SOLO_YOUTH', 'ELDERLY_CARE', 'FAMILY_KIDS'].includes(careModeRaw)
+      ? (careModeRaw as PilgrimCareMode)
+      : 'ELDERLY_CARE';
+
+    if (fullName.length < 2 || fullName.length > 100) {
+      res.status(400).json({ error: 'Please enter your full name.' });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) {
+      res.status(400).json({ error: 'Please enter a valid email address.' });
+      return;
+    }
+    if (phone.replace(/\D/g, '').length < 10) {
+      res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+      return;
+    }
+    if (password.length < 6 || password.length > 128) {
+      res.status(400).json({ error: 'Password must be at least 6 characters.' });
+      return;
+    }
+
+    const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+    if (existing) {
+      res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+      return;
+    }
+
+    const userId = crypto.randomUUID();
+    const passwordHash = hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    db.prepare(
+      'INSERT INTO users (id, full_name, email, phone, password_hash, care_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(userId, fullName, email, phone, passwordHash, careMode, nowIso);
+
+    const user: AuthUser = {
+      id: userId,
+      full_name: fullName,
+      email,
+      phone,
+      care_mode: careMode,
+    };
+    const token = signAuthToken(user);
+    res.status(201).json({ token, user });
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: 'Could not create your account right now.' });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Enter both your email and password.' });
+      return;
+    }
+
+    const row = db
+      .prepare('SELECT id, full_name, email, phone, password_hash, care_mode FROM users WHERE LOWER(email) = LOWER(?)')
+      .get(email) as Record<string, unknown> | undefined;
+
+    if (!row || !verifyPassword(password, String(row.password_hash))) {
+      res.status(401).json({ error: 'Incorrect email or password. Please try again.' });
+      return;
+    }
+
+    const user: AuthUser = {
+      id: String(row.id),
+      full_name: String(row.full_name),
+      email: String(row.email),
+      phone: String(row.phone),
+      care_mode: row.care_mode as PilgrimCareMode,
+    };
+    const token = signAuthToken(user);
+    res.json({ token, user });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Unable to sign in right now.' });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const user = getAuthUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ error: 'Not signed in.' });
+    return;
+  }
+  res.json({ user });
+});
+
 app.get('/api/bookings', (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (q.length > 0) {
@@ -144,11 +386,20 @@ app.get('/api/bookings', (req, res) => {
     res.json({ bookings: matches });
     return;
   }
+  const user = getAuthUserFromRequest(req);
+  if (user) {
+    const userBookings = listBookingsForUser(user.id, user.email);
+    if (userBookings.length > 0) {
+      res.json({ bookings: userBookings });
+      return;
+    }
+  }
   res.json({ bookings: listRecentBookings(10) });
 });
 
 app.post('/api/bookings', async (req, res) => {
   try {
+    const authUser = getAuthUserFromRequest(req);
     const body = req.body ?? {};
     const circuitId = String(body.circuit_id || '').trim();
     const tier = String(body.tier || '').toUpperCase() as PackageTier;
@@ -298,8 +549,8 @@ app.post('/api/bookings', async (req, res) => {
           id, pnr, circuit_id, booking_mode, tier, pilgrim_name, pilgrim_email,
           pilgrim_phone, travel_date, pilgrim_count, senior_assistance, prasad_box,
           sankalp_gotra, darshan_slot_id, train_route_id, train_class, train_coach_berth,
-          stay_id, itinerary_json, total_amount, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          stay_id, itinerary_json, total_amount, status, created_at, user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         bookingId,
         pnr,
@@ -322,7 +573,8 @@ app.post('/api/bookings', async (req, res) => {
         JSON.stringify(sanitizedItinerary),
         totalAmount,
         initialStatus,
-        nowIso
+        nowIso,
+        authUser ? authUser.id : null
       );
 
       const insertUpdate = db.prepare(

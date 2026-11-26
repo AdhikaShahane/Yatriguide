@@ -23,10 +23,10 @@ export function CircuitCard({ circuit, isSelected, onSelect }: CircuitCardProps)
   const isFillingFast = circuit.booking_status === 'FILLING_FAST';
 
   const statusText = isPreBook
-    ? `Pre-Booking Open · Opens ${circuit.window_opens_at}`
+    ? `Early Pre-Booking · Opens ${circuit.window_opens_at}`
     : isFillingFast
-      ? `Filling Fast · ${circuit.slots_remaining} slots left`
-      : `Booking Live · ${circuit.slots_remaining} slots left`;
+      ? `Few Seats Left · ${circuit.slots_remaining} left`
+      : `Open Now · ${circuit.slots_remaining} seats left`;
 
   const statusColorClass = isPreBook
     ? 'text-[#B87D14]'
@@ -59,26 +59,29 @@ export function CircuitCard({ circuit, isSelected, onSelect }: CircuitCardProps)
             <span className="mt-1 text-sm text-[#685649]">{circuit.region}</span>
           </div>
         )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 via-black/20 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
         <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-xs font-medium text-[#FFFDF9]">
-          <span className="truncate">{circuit.window_label}</span>
+          <span className="truncate">{circuit.region.split('(')[0].trim()}</span>
           <span className="font-mono-data shrink-0">{circuit.duration_days} Days</span>
         </div>
       </div>
 
       <div className="flex flex-1 flex-col justify-between p-5">
         <div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#685649]">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-[#6B1D1D]">
             <span>{circuit.category}</span>
-            <span aria-hidden="true">·</span>
-            <span>{circuit.temples.length} Sacred Stops</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">{circuit.region.split('(')[0].trim()}</span>
+            <span className="text-[#685649] font-medium">
+              {circuit.temples.length} Temples
+            </span>
           </div>
 
-          <h3 className="mt-2 font-display text-2xl font-bold leading-snug text-[#241914]">
+          <h3 className="mt-1.5 font-display text-2xl font-bold leading-snug text-[#241914]">
             {circuit.title}
           </h3>
+
+          <div className="mt-1 text-xs font-semibold text-[#B84A0D]">
+            {circuit.deity}
+          </div>
 
           <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#685649]">
             {circuit.summary}
@@ -86,27 +89,25 @@ export function CircuitCard({ circuit, isSelected, onSelect }: CircuitCardProps)
         </div>
 
         <div className="mt-5 border-t border-[#E6D7C3] pt-4">
-          <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+          <div className="text-xs font-semibold">
             <span className={statusColorClass}>{statusText}</span>
-            <span className="font-mono-data text-[#685649]">
-              {circuit.slots_remaining}/{circuit.slots_total}
-            </span>
           </div>
 
           <div className="mt-3 flex items-end justify-between gap-4">
             <div>
-              <div className="text-xs text-[#685649]">Seva to Rajasi VIP</div>
-              <div className="font-mono-data text-base font-semibold text-[#241914]">
-                {formatInr(circuit.price_seva)} – {formatInr(circuit.price_rajasi)}
+              <div className="text-xs text-[#685649]">Starts from</div>
+              <div className="font-mono-data text-lg font-bold text-[#241914]">
+                {formatInr(circuit.price_seva)}{' '}
+                <span className="text-xs font-normal text-[#685649]">/ person</span>
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => onSelect(circuit)}
-              className="inline-flex items-center gap-2 rounded-md bg-[#D95D16] px-4 py-2 text-sm font-semibold text-[#FFFDF9] transition-colors duration-150 hover:bg-[#B84A0D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-md bg-[#D95D16] px-4 py-2.5 text-sm font-semibold text-[#FFFDF9] transition-colors duration-150 hover:bg-[#B84A0D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <span>{isPreBook ? 'Pre-Book' : 'Book Yatra'}</span>
+              <span>{isPreBook ? 'Pre-Book Trip' : 'View & Book'}</span>
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>

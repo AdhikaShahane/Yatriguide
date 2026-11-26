@@ -10,10 +10,12 @@ import type {
   EmailDispatchRecord,
   ItineraryDay,
   StayOption,
+  TempleDirectoryEntry,
   TrainClassOption,
   TrainRoute,
 } from '../src/types/pilgrimage.ts';
 import { buildTicketEmailHtml } from './email.ts';
+import { VERIFIED_TEMPLES_SEED } from './templesSeed.ts';
 
 const dataDir = path.resolve(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) {
@@ -988,6 +990,1051 @@ function seedInitialData(): void {
 
 seedInitialData();
 
+function ensureUniversalSeedData(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      phone TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      care_mode TEXT NOT NULL DEFAULT 'ELDERLY_CARE',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS temples_directory (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      tradition TEXT NOT NULL,
+      location TEXT NOT NULL,
+      state TEXT NOT NULL,
+      deity_or_focus TEXT NOT NULL,
+      darshan_timings TEXT NOT NULL,
+      aarti_timings TEXT NOT NULL,
+      opening_closing TEXT NOT NULL,
+      online_booking_info TEXT NOT NULL,
+      entry_requirements TEXT NOT NULL,
+      dress_code TEXT NOT NULL,
+      photography_rules TEXT NOT NULL,
+      festivals_json TEXT NOT NULL,
+      official_website TEXT NOT NULL,
+      source_authority TEXT NOT NULL,
+      crowd_weekday TEXT NOT NULL,
+      crowd_weekend TEXT NOT NULL,
+      crowd_festival TEXT NOT NULL,
+      recommended_visit_window TEXT NOT NULL,
+      special_darshan_notes TEXT NOT NULL,
+      wheelchair_accessible INTEGER NOT NULL,
+      ramps_and_lifts TEXT NOT NULL,
+      walking_distance_note TEXT NOT NULL,
+      resting_zones TEXT NOT NULL,
+      medical_facility TEXT NOT NULL,
+      nearby_pharmacy TEXT NOT NULL,
+      emergency_contact TEXT NOT NULL,
+      history_summary TEXT NOT NULL,
+      significance_summary TEXT NOT NULL,
+      rituals_summary TEXT NOT NULL,
+      faqs_json TEXT NOT NULL,
+      image_url TEXT NOT NULL
+    );
+  `);
+
+  const bookingCols = db.prepare('PRAGMA table_info(bookings)').all() as { name: string }[];
+  if (!bookingCols.some((c) => c.name === 'user_id')) {
+    db.exec('ALTER TABLE bookings ADD COLUMN user_id TEXT');
+  }
+
+  const templeCount = (
+    db.prepare('SELECT COUNT(*) as cnt FROM temples_directory').get() as { cnt: number }
+  ).cnt;
+
+  if (templeCount === 0) {
+    const insTemple = db.prepare(`
+      INSERT INTO temples_directory (
+        id, name, tradition, location, state, deity_or_focus, darshan_timings,
+        aarti_timings, opening_closing, online_booking_info, entry_requirements,
+        dress_code, photography_rules, festivals_json, official_website,
+        source_authority, crowd_weekday, crowd_weekend, crowd_festival,
+        recommended_visit_window, special_darshan_notes, wheelchair_accessible,
+        ramps_and_lifts, walking_distance_note, resting_zones, medical_facility,
+        nearby_pharmacy, emergency_contact, history_summary, significance_summary,
+        rituals_summary, faqs_json, image_url
+      ) VALUES (
+        @id, @name, @tradition, @location, @state, @deity_or_focus, @darshan_timings,
+        @aarti_timings, @opening_closing, @online_booking_info, @entry_requirements,
+        @dress_code, @photography_rules, @festivals_json, @official_website,
+        @source_authority, @crowd_weekday, @crowd_weekend, @crowd_festival,
+        @recommended_visit_window, @special_darshan_notes, @wheelchair_accessible,
+        @ramps_and_lifts, @walking_distance_note, @resting_zones, @medical_facility,
+        @nearby_pharmacy, @emergency_contact, @history_summary, @significance_summary,
+        @rituals_summary, @faqs_json, @image_url
+      )
+    `);
+
+    const tx = db.transaction(() => {
+      for (const t of VERIFIED_TEMPLES_SEED) {
+        insTemple.run({
+          ...t,
+          festivals_json: JSON.stringify(t.festivals),
+          faqs_json: JSON.stringify(t.faqs),
+        });
+      }
+    });
+    tx();
+  }
+
+  // Ensure Option C Buddhist Sacred Circuit & Shirdi Regional Circuit exist in circuits
+  const buddhistExists = db
+    .prepare('SELECT id FROM circuits WHERE id = ?')
+    .get('buddhist-sacred-circuit');
+
+  if (!buddhistExists) {
+    const universalCircuits = [
+      {
+        id: 'buddhist-sacred-circuit',
+        slug: 'buddhist-sacred-circuit-bodhgaya-sarnath',
+        title: 'Bodh Gaya, Sarnath & Kushinagar Buddhist Trail',
+        category: 'Buddhist Circuit',
+        region: 'Bihar & Uttar Pradesh (Bodh Gaya · Sarnath · Kushinagar)',
+        deity: 'Gautama Buddha Enlightenment & Parinirvana Sites',
+        temples: [
+          { order: 1, name: 'Mahabodhi Mahavihara & Bodhi Tree', town: 'Bodh Gaya', deity: 'Enlightenment Seat', highlight: 'Vajrasana & tranquil sunrise chanting' },
+          { order: 2, name: 'Rajgir Griddhakuta & Nalanda', town: 'Rajgir', deity: 'Vulture Peak', highlight: 'Peace Pagoda ropeway & ancient university ruins' },
+          { order: 3, name: 'Dhamek Stupa & Mulagandha Kuti', town: 'Sarnath', deity: 'First Dharma Sermon', highlight: 'Deer Park evening meditation & museum' },
+          { order: 4, name: 'Mahaparinirvana Stupa', town: 'Kushinagar', deity: 'Final Parinirvana', highlight: 'Reclining Buddha sanctum & Ramabhar Stupa' },
+        ],
+        duration_days: 5,
+        image_url: '/src/assets/images/circuit_buddhist_bodhgaya_1795710528041.jpg',
+        booking_status: 'LIVE_NOW',
+        window_label: 'Winter Meditation & Tipitaka Season',
+        window_opens_at: '2026-11-26',
+        slots_total: 110,
+        slots_remaining: 34,
+        price_seva: 5800,
+        price_parivar: 11900,
+        price_rajasi: 23500,
+        summary: 'Wheelchair-friendly spiritual journey uniting Bodh Gaya, Rajgir, Sarnath, and Kushinagar with monastery guest stays, Mahabodhi Express rail berths, and quiet chanting schedules.',
+        highlights: [
+          'Step-free paved courtyard routes suited for elderly pilgrims',
+          'Mahabodhi Express & Vande Bharat rail connectivity via Gaya & Varanasi',
+          'Verified BTMC meditation timings and calm morning chanting access',
+        ],
+        default_itinerary: [
+          {
+            day: 1,
+            title: 'Gaya Arrival & Mahabodhi Evening Chanting',
+            morning_ritual: 'Gaya Jn rail pickup & monastery check-in',
+            darshan_window: '04:30 PM Bodhi Tree Parikrama · 06:00 PM Evening Sutta Chanting',
+            evening_program: 'Butter lamp lighting at Muchalinda Lotus Pond',
+            included: true,
+          },
+          {
+            day: 2,
+            title: 'Sunrise Vajrasana Meditation & Sujata Garh',
+            morning_ritual: '05:30 AM dawn chanting beneath Bodhi Tree',
+            darshan_window: '09:30 AM International Monasteries · 03:30 PM Sujata Stupa',
+            evening_program: 'Quiet vegetarian monastery meal & rest',
+            included: true,
+          },
+          {
+            day: 3,
+            title: 'Rajgir Peace Pagoda & Nalanda Ruins',
+            morning_ritual: 'Ropeway ascent to Vishwa Shanti Stupa (senior accessible)',
+            darshan_window: '09:00 AM Griddhakuta Peak · 01:30 PM Nalanda Mahavihara',
+            evening_program: 'Overnight train or coach transit to Varanasi / Sarnath',
+            included: true,
+          },
+          {
+            day: 4,
+            title: 'Sarnath Dhamek Stupa & Deer Park',
+            morning_ritual: 'Mindful walk at Sarnath gardens',
+            darshan_window: '08:00 AM Dhamek Stupa · 11:00 AM Mulagandha Kuti Vihara',
+            evening_program: 'Evening reflection at Ashoka Pillar complex',
+            included: true,
+          },
+          {
+            day: 5,
+            title: 'Kushinagar Mahaparinirvana Temple',
+            morning_ritual: 'Peaceful morning tribute at Reclining Buddha shrine',
+            darshan_window: '09:00 AM Mahaparinirvana Stupa · 11:30 AM Ramabhar Stupa',
+            evening_program: 'Gorakhpur / Varanasi rail departure',
+            included: true,
+          },
+        ],
+      },
+      {
+        id: 'shirdi-shani-teerth',
+        slug: 'shirdi-sai-shani-shingnapur-care',
+        title: 'Shirdi Sai Baba & Shani Shingnapur Senior-Care Yatra',
+        category: 'Regional Teerth',
+        region: 'Maharashtra (Shirdi · Shingnapur)',
+        deity: 'Shri Sai Baba Samadhi & Shani Dev',
+        temples: [
+          { order: 1, name: 'Shri Saibaba Samadhi Mandir', town: 'Shirdi', deity: 'Sai Baba', highlight: 'Gate 6 Senior/Wheelchair lane & Prasadalaya' },
+          { order: 2, name: 'Dwarkamai & Chavadi', town: 'Shirdi', deity: 'Sacred Dhuni', highlight: 'Historic residence & Palkhi route' },
+          { order: 3, name: 'Shani Shingnapur Swayambhu', town: 'Shingnapur', deity: 'Shani Dev', highlight: 'Open-air black stone shrine' },
+        ],
+        duration_days: 2,
+        image_url: '/src/assets/images/circuit_ashtavinayak_ganesha_1795707382899.jpg',
+        booking_status: 'LIVE_NOW',
+        window_label: 'Daily Sansthan Time-Slot Open',
+        window_opens_at: '2026-11-26',
+        slots_total: 150,
+        slots_remaining: 42,
+        price_seva: 2499,
+        price_parivar: 5400,
+        price_rajasi: 11800,
+        summary: 'Designed especially for families and elderly pilgrims with Sainagar Shirdi Vande Bharat rail sync, step-free Gate 6 access, and calm mid-week darshan slots.',
+        highlights: [
+          'Gate 6 wheelchair & elderly lift access pre-coordinated',
+          'CSMT – Sainagar Shirdi Vande Bharat & Dadar Express options',
+          'Sansthan Bhakta Niwas or 4-Star pure-veg stay with shuttle',
+        ],
+        default_itinerary: [
+          {
+            day: 1,
+            title: 'Sainagar Shirdi Arrival & Samadhi Mandir Darshan',
+            morning_ritual: 'Sainagar Shirdi station pickup & check-in',
+            darshan_window: '02:30 PM Samadhi Mandir Paid / Senior Gate 6 · 04:30 PM Dwarkamai',
+            evening_program: '06:15 PM Dhoop Aarti & Sansthan Prasadalaya dinner',
+            included: true,
+          },
+          {
+            day: 2,
+            title: 'Chavadi Morning Prayers & Shani Shingnapur',
+            morning_ritual: '06:00 AM Kakad / Morning Samadhi visit & Lendi Baug',
+            darshan_window: '10:30 AM Shani Shingnapur Open Shrine',
+            evening_program: 'Return boarding from Sainagar Shirdi / Kopargaon',
+            included: true,
+          },
+        ],
+      },
+    ];
+
+    const insertCircuit = db.prepare(`
+      INSERT OR IGNORE INTO circuits (
+        id, slug, title, category, region, deity, temples_json, duration_days,
+        image_url, booking_status, window_label, window_opens_at, slots_total,
+        slots_remaining, price_seva, price_parivar, price_rajasi, summary,
+        highlights_json, default_itinerary_json
+      ) VALUES (
+        @id, @slug, @title, @category, @region, @deity, @temples_json, @duration_days,
+        @image_url, @booking_status, @window_label, @window_opens_at, @slots_total,
+        @slots_remaining, @price_seva, @price_parivar, @price_rajasi, @summary,
+        @highlights_json, @default_itinerary_json
+      )
+    `);
+    const insertDarshan = db.prepare(`
+      INSERT OR IGNORE INTO darshan_slots (id, circuit_id, slot_name, slot_time, tier_access, surcharge, seats_remaining, is_vip)
+      VALUES (@id, @circuit_id, @slot_name, @slot_time, @tier_access, @surcharge, @seats_remaining, @is_vip)
+    `);
+    const insertTrain = db.prepare(`
+      INSERT OR IGNORE INTO train_routes (
+        id, circuit_id, train_number, train_name, origin_city, arrival_station,
+        departure_time, arrival_time, duration_text, classes_json, live_status
+      ) VALUES (
+        @id, @circuit_id, @train_number, @train_name, @origin_city, @arrival_station,
+        @departure_time, @arrival_time, @duration_text, @classes_json, @live_status
+      )
+    `);
+    const insertStay = db.prepare(`
+      INSERT OR IGNORE INTO stays (id, circuit_id, name, tier, stay_type, distance_to_temple, meal_plan, price_per_night)
+      VALUES (@id, @circuit_id, @name, @tier, @stay_type, @distance_to_temple, @meal_plan, @price_per_night)
+    `);
+
+    const tx = db.transaction(() => {
+      for (const c of universalCircuits) {
+        insertCircuit.run({
+          id: c.id,
+          slug: c.slug,
+          title: c.title,
+          category: c.category,
+          region: c.region,
+          deity: c.deity,
+          temples_json: JSON.stringify(c.temples),
+          duration_days: c.duration_days,
+          image_url: c.image_url,
+          booking_status: c.booking_status,
+          window_label: c.window_label,
+          window_opens_at: c.window_opens_at,
+          slots_total: c.slots_total,
+          slots_remaining: c.slots_remaining,
+          price_seva: c.price_seva,
+          price_parivar: c.price_parivar,
+          price_rajasi: c.price_rajasi,
+          summary: c.summary,
+          highlights_json: JSON.stringify(c.highlights),
+          default_itinerary_json: JSON.stringify(c.default_itinerary),
+        });
+
+        insertDarshan.run({
+          id: `${c.id}-morning`,
+          circuit_id: c.id,
+          slot_name: c.id === 'buddhist-sacred-circuit' ? 'Sunrise Bodhi Chanting & Parikrama' : 'Senior & Family Gate 6 Morning Pass',
+          slot_time: '06:00 AM – 08:30 AM',
+          tier_access: 'ALL',
+          surcharge: 0,
+          seats_remaining: 36,
+          is_vip: 0,
+        });
+        insertDarshan.run({
+          id: `${c.id}-priority`,
+          circuit_id: c.id,
+          slot_name: c.id === 'buddhist-sacred-circuit' ? 'Guided Meditation & Stupa Priority Access' : 'Sansthan Priority Time-Slot & Dhoop Aarti',
+          slot_time: '04:00 PM – 06:30 PM',
+          tier_access: 'PARIVAR_PLUS',
+          surcharge: 450,
+          seats_remaining: 20,
+          is_vip: 1,
+        });
+
+        insertStay.run({
+          id: `${c.id}-stay-seva`,
+          circuit_id: c.id,
+          name: c.id === 'buddhist-sacred-circuit' ? 'Bodh Gaya Sangha Pilgrim Guest House' : 'Shirdi Sansthan Bhakta Niwas',
+          tier: 'SEVA',
+          stay_type: 'Clean Ground-Floor / Lift Pilgrim Stay',
+          distance_to_temple: '150m flat path',
+          meal_plan: 'Pure Veg Satvik Thali',
+          price_per_night: 750,
+        });
+        insertStay.run({
+          id: `${c.id}-stay-parivar`,
+          circuit_id: c.id,
+          name: c.id === 'buddhist-sacred-circuit' ? 'Vajra Heritage Peace Lodge' : 'Sai Tulasi Family Residency',
+          tier: 'PARIVAR',
+          stay_type: '3-Star Accessible Pure-Veg Stay',
+          distance_to_temple: '220m with e-rickshaw transfer',
+          meal_plan: 'Breakfast & Dinner Included',
+          price_per_night: 2200,
+        });
+        insertStay.run({
+          id: `${c.id}-stay-rajasi`,
+          circuit_id: c.id,
+          name: c.id === 'buddhist-sacred-circuit' ? 'Lotus Enlightenment Sanctuary Suites' : 'Shirdi Retreat Courtyard Suites',
+          tier: 'RAJASI',
+          stay_type: '5-Star Peaceful Garden Suite',
+          distance_to_temple: 'Private Battery Cart Transfer',
+          meal_plan: 'All-Day Satvik Kitchen',
+          price_per_night: 5900,
+        });
+      }
+
+      insertTrain.run({
+        id: 'tr-mahabodhi-exp',
+        circuit_id: 'buddhist-sacred-circuit',
+        train_number: '12398',
+        train_name: 'Mahabodhi SF Express',
+        origin_city: 'New Delhi (NDLS)',
+        arrival_station: 'Gaya Jn (GAYA)',
+        departure_time: '12:50',
+        arrival_time: '02:55',
+        duration_text: '14h 05m',
+        classes_json: JSON.stringify([
+          { code: 'SL', label: 'Sleeper', fare: 510, available: 42 },
+          { code: '3A', label: 'AC 3 Tier', fare: 1320, available: 24 },
+          { code: '2A', label: 'AC 2 Tier', fare: 1890, available: 10 },
+          { code: '1A', label: 'First AC', fare: 3180, available: 4 },
+        ]),
+        live_status: 'Direct Bodh Gaya Gateway',
+      });
+
+      insertTrain.run({
+        id: 'tr-shirdi-vb',
+        circuit_id: 'shirdi-shani-teerth',
+        train_number: '22223',
+        train_name: 'Mumbai CSMT – Sainagar Shirdi Vande Bharat',
+        origin_city: 'Mumbai CSMT',
+        arrival_station: 'Sainagar Shirdi (SNSI)',
+        departure_time: '06:20',
+        arrival_time: '11:40',
+        duration_text: '5h 20m',
+        classes_json: JSON.stringify([
+          { code: 'CC', label: 'AC Chair Car', fare: 975, available: 34 },
+          { code: 'EC', label: 'Executive Chair Car', fare: 1840, available: 11 },
+        ]),
+        live_status: 'Senior Favorite · Step-Free Platform',
+      });
+    });
+    tx();
+  }
+
+  // Ensure vibrant destination-specific images and Shree Jagannath Puri Dham (Odisha) are synced
+  const syncTx = db.transaction(() => {
+    const updateTempleImg = db.prepare('UPDATE temples_directory SET image_url = ? WHERE id = ?');
+    const insOrIgnoreTemple = db.prepare(`
+      INSERT OR IGNORE INTO temples_directory (
+        id, name, tradition, location, state, deity_or_focus, darshan_timings,
+        aarti_timings, opening_closing, online_booking_info, entry_requirements,
+        dress_code, photography_rules, festivals_json, official_website,
+        source_authority, crowd_weekday, crowd_weekend, crowd_festival,
+        recommended_visit_window, special_darshan_notes, wheelchair_accessible,
+        ramps_and_lifts, walking_distance_note, resting_zones, medical_facility,
+        nearby_pharmacy, emergency_contact, history_summary, significance_summary,
+        rituals_summary, faqs_json, image_url
+      ) VALUES (
+        @id, @name, @tradition, @location, @state, @deity_or_focus, @darshan_timings,
+        @aarti_timings, @opening_closing, @online_booking_info, @entry_requirements,
+        @dress_code, @photography_rules, @festivals_json, @official_website,
+        @source_authority, @crowd_weekday, @crowd_weekend, @crowd_festival,
+        @recommended_visit_window, @special_darshan_notes, @wheelchair_accessible,
+        @ramps_and_lifts, @walking_distance_note, @resting_zones, @medical_facility,
+        @nearby_pharmacy, @emergency_contact, @history_summary, @significance_summary,
+        @rituals_summary, @faqs_json, @image_url
+      )
+    `);
+
+    for (const t of VERIFIED_TEMPLES_SEED) {
+      insOrIgnoreTemple.run({
+        ...t,
+        festivals_json: JSON.stringify(t.festivals),
+        faqs_json: JSON.stringify(t.faqs),
+      });
+      updateTempleImg.run(t.image_url, t.id);
+    }
+
+    const updateCircuitImg = db.prepare('UPDATE circuits SET image_url = ? WHERE id = ?');
+    updateCircuitImg.run('/src/assets/images/tirupati_balaji_1795712131516.jpg', 'tirupati-kanchi-divya-desam');
+    updateCircuitImg.run('/src/assets/images/shirdi_saibaba_1795712133273.jpg', 'shirdi-shani-teerth');
+    updateCircuitImg.run('/src/assets/images/ujjain_mahakal_1795712133305.jpg', 'ujjain-mahakal-omkareshwar');
+    updateCircuitImg.run('/src/assets/images/trimbakeshwar_shiva_1795712132766.jpg', 'maharashtra-jyotirlinga-trio');
+
+    const puriExists = db
+      .prepare('SELECT id FROM circuits WHERE id = ?')
+      .get('jagannath-puri-konark-odisha');
+
+    if (!puriExists) {
+      const puriCircuit = {
+        id: 'jagannath-puri-konark-odisha',
+        slug: 'shree-jagannath-puri-konark-odisha',
+        title: 'Shree Jagannath Puri, Konark & Lingaraj Odisha Yatra',
+        category: 'Char Dham',
+        region: 'Odisha (Puri · Konark · Bhubaneswar)',
+        deity: 'Lord Jagannath, Balabhadra & Devi Subhadra',
+        temples: [
+          { order: 1, name: 'Shree Jagannath Temple', town: 'Puri', deity: 'Lord Jagannath (Char Dham East)', highlight: 'Mangala Alati, Singhadwara & Anand Bazaar Mahaprasad' },
+          { order: 2, name: 'Gundicha & Lokanath Mandir', town: 'Puri', deity: 'Shiva & Rath Yatra Garden Shrine', highlight: 'Sacred chariot destination & serene lotus tank' },
+          { order: 3, name: 'Konark Sun Temple & Chandrabhaga', town: 'Konark', deity: 'Surya Narayana', highlight: 'UNESCO 13th-century stone chariot marvel' },
+          { order: 4, name: 'Lingaraj & Mukteswar Temples', town: 'Bhubaneswar', deity: 'Harihara Shiva', highlight: 'Ancient Kalinga architecture & Bindu Sagar' },
+        ],
+        duration_days: 4,
+        image_url: '/src/assets/images/jagannath_puri_1795712131738.jpg',
+        booking_status: 'LIVE_NOW',
+        window_label: 'Kartika & Winter Darshan Window',
+        window_opens_at: '2026-11-26',
+        slots_total: 140,
+        slots_remaining: 27,
+        price_seva: 4250,
+        price_parivar: 8600,
+        price_rajasi: 18400,
+        summary: 'Eastern Char Dham pilgrimage to Shree Jagannath Puri in Odisha with Puri Vande Bharat & Purushottam Express berths, North Gate senior ramp entry, and Abadha Mahaprasad.',
+        highlights: [
+          'North Gate (Hastidwara) wheelchair & senior step-free assistance',
+          'Includes Anand Bazaar Mahaprasad token & Puri sea-coast Bhakta Niwas',
+          'Howrah–Puri Vande Bharat & New Delhi Purushottam Express rail integration',
+        ],
+        default_itinerary: [
+          {
+            day: 1,
+            title: 'Puri Arrival & Evening Singhadwara Darshan',
+            morning_ritual: 'Puri station pickup & check-in near Grand Road',
+            darshan_window: '05:00 PM Singhadwara & Patitapabana · 07:00 PM Sandhya Alati',
+            evening_program: 'Abadha Mahaprasad dinner & Golden Beach walk',
+            included: true,
+          },
+          {
+            day: 2,
+            title: 'Mangala Alati & Gundicha Mandir',
+            morning_ritual: '05:30 AM Shree Jagannath Mangala Alati',
+            darshan_window: '06:30 AM Abakasha · 11:00 AM Gundicha & Lokanath Temple',
+            evening_program: 'Narendra Pokhari evening lamps & Bhajan Sandhya',
+            included: true,
+          },
+          {
+            day: 3,
+            title: 'Konark Sun Temple & Sakshigopal',
+            morning_ritual: 'Sunrise coastal drive along Marine Drive',
+            darshan_window: '09:00 AM Konark Sun Temple · 03:30 PM Sakshigopal Temple',
+            evening_program: 'Rest at Puri stay',
+            included: true,
+          },
+          {
+            day: 4,
+            title: 'Bhubaneswar Lingaraj Temple & Rail Departure',
+            morning_ritual: 'Drive to Ekamra Kshetra (Bhubaneswar)',
+            darshan_window: '09:30 AM Lingaraj Temple · 11:30 AM Mukteswar',
+            evening_program: 'Bhubaneswar / Puri rail boarding',
+            included: true,
+          },
+        ],
+      };
+
+      db.prepare(`
+        INSERT OR IGNORE INTO circuits (
+          id, slug, title, category, region, deity, temples_json, duration_days,
+          image_url, booking_status, window_label, window_opens_at, slots_total,
+          slots_remaining, price_seva, price_parivar, price_rajasi, summary,
+          highlights_json, default_itinerary_json
+        ) VALUES (
+          @id, @slug, @title, @category, @region, @deity, @temples_json, @duration_days,
+          @image_url, @booking_status, @window_label, @window_opens_at, @slots_total,
+          @slots_remaining, @price_seva, @price_parivar, @price_rajasi, @summary,
+          @highlights_json, @default_itinerary_json
+        )
+      `).run({
+        id: puriCircuit.id,
+        slug: puriCircuit.slug,
+        title: puriCircuit.title,
+        category: puriCircuit.category,
+        region: puriCircuit.region,
+        deity: puriCircuit.deity,
+        temples_json: JSON.stringify(puriCircuit.temples),
+        duration_days: puriCircuit.duration_days,
+        image_url: puriCircuit.image_url,
+        booking_status: puriCircuit.booking_status,
+        window_label: puriCircuit.window_label,
+        window_opens_at: puriCircuit.window_opens_at,
+        slots_total: puriCircuit.slots_total,
+        slots_remaining: puriCircuit.slots_remaining,
+        price_seva: puriCircuit.price_seva,
+        price_parivar: puriCircuit.price_parivar,
+        price_rajasi: puriCircuit.price_rajasi,
+        summary: puriCircuit.summary,
+        highlights_json: JSON.stringify(puriCircuit.highlights),
+        default_itinerary_json: JSON.stringify(puriCircuit.default_itinerary),
+      });
+
+      const insDarshan = db.prepare(`
+        INSERT OR IGNORE INTO darshan_slots (id, circuit_id, slot_name, slot_time, tier_access, surcharge, seats_remaining, is_vip)
+        VALUES (@id, @circuit_id, @slot_name, @slot_time, @tier_access, @surcharge, @seats_remaining, @is_vip)
+      `);
+      insDarshan.run({
+        id: 'jagannath-puri-mangala',
+        circuit_id: puriCircuit.id,
+        slot_name: 'Mangala Alati & North Gate Senior Access',
+        slot_time: '05:30 AM – 07:30 AM',
+        tier_access: 'ALL',
+        surcharge: 0,
+        seats_remaining: 38,
+        is_vip: 0,
+      });
+      insDarshan.run({
+        id: 'jagannath-puri-sandhya',
+        circuit_id: puriCircuit.id,
+        slot_name: 'Sandhya Alati & Anand Bazaar Mahaprasad Pass',
+        slot_time: '06:00 PM – 08:30 PM',
+        tier_access: 'PARIVAR_PLUS',
+        surcharge: 550,
+        seats_remaining: 20,
+        is_vip: 1,
+      });
+
+      const insStay = db.prepare(`
+        INSERT OR IGNORE INTO stays (id, circuit_id, name, tier, stay_type, distance_to_temple, meal_plan, price_per_night)
+        VALUES (@id, @circuit_id, @name, @tier, @stay_type, @distance_to_temple, @meal_plan, @price_per_night)
+      `);
+      insStay.run({
+        id: 'jagannath-puri-stay-seva',
+        circuit_id: puriCircuit.id,
+        name: 'Neelachal Bhakta Niwas Puri',
+        tier: 'SEVA',
+        stay_type: 'SJTA Pilgrim Rest House (Clean Ground & Lift)',
+        distance_to_temple: '180m from Grand Road',
+        meal_plan: 'Pure Veg Odia Satvik Thali',
+        price_per_night: 700,
+      });
+      insStay.run({
+        id: 'jagannath-puri-stay-parivar',
+        circuit_id: puriCircuit.id,
+        name: 'Swargadwar Sea-View Satvik Residency',
+        tier: 'PARIVAR',
+        stay_type: '3-Star Family AC Stay near Beach & Temple',
+        distance_to_temple: '350m with Battery E-Cart',
+        meal_plan: 'Breakfast & Temple Mahaprasad',
+        price_per_night: 2350,
+      });
+      insStay.run({
+        id: 'jagannath-puri-stay-rajasi',
+        circuit_id: puriCircuit.id,
+        name: 'Puri Heritage Coast Sanctuary Suites',
+        tier: 'RAJASI',
+        stay_type: '5-Star Coastal Suite with Guide',
+        distance_to_temple: 'Private E-Cart to North Gate',
+        meal_plan: 'All-Day Satvik Kitchen',
+        price_per_night: 6100,
+      });
+
+      const insTrain = db.prepare(`
+        INSERT OR IGNORE INTO train_routes (
+          id, circuit_id, train_number, train_name, origin_city, arrival_station,
+          departure_time, arrival_time, duration_text, classes_json, live_status
+        ) VALUES (
+          @id, @circuit_id, @train_number, @train_name, @origin_city, @arrival_station,
+          @departure_time, @arrival_time, @duration_text, @classes_json, @live_status
+        )
+      `);
+      insTrain.run({
+        id: 'tr-puri-vb',
+        circuit_id: puriCircuit.id,
+        train_number: '22895',
+        train_name: 'Howrah – Puri Vande Bharat Express',
+        origin_city: 'Howrah (HWH)',
+        arrival_station: 'Puri (PURI)',
+        departure_time: '06:10',
+        arrival_time: '12:35',
+        duration_text: '6h 25m',
+        classes_json: JSON.stringify([
+          { code: 'CC', label: 'Chair Car', fare: 1440, available: 30 },
+          { code: 'EC', label: 'Executive Chair', fare: 2680, available: 8 },
+        ]),
+        live_status: 'Booking Open · Direct Coastal Rail',
+      });
+      insTrain.run({
+        id: 'tr-purushottam-exp',
+        circuit_id: puriCircuit.id,
+        train_number: '12802',
+        train_name: 'Purushottam SF Express',
+        origin_city: 'New Delhi (NDLS)',
+        arrival_station: 'Puri (PURI)',
+        departure_time: '22:40',
+        arrival_time: '05:25',
+        duration_text: '30h 45m',
+        classes_json: JSON.stringify([
+          { code: 'SL', label: 'Sleeper', fare: 740, available: 44 },
+          { code: '3A', label: 'AC 3 Tier', fare: 1920, available: 21 },
+          { code: '2A', label: 'AC 2 Tier', fare: 2780, available: 9 },
+        ]),
+        live_status: 'Classic Pilgrimage Express',
+      });
+    }
+
+    const ayodhyaExists = db
+      .prepare('SELECT id FROM circuits WHERE id = ?')
+      .get('ram-mandir-ayodhya');
+
+    if (!ayodhyaExists) {
+      const ayodhyaCircuit = {
+        id: 'ram-mandir-ayodhya',
+        slug: 'ram-mandir-ayodhya-yatra',
+        title: 'Ram Mandir, Ayodhya & Sarayu Darshan',
+        category: 'Regional Teerth',
+        region: 'Uttar Pradesh (Ayodhya)',
+        deity: 'Shri Ram Lalla Virajman & Hanuman Garhi',
+        temples: [
+          { order: 1, name: 'Hanuman Garhi', town: 'Ayodhya', deity: 'Lord Hanuman', highlight: 'Traditional gateway darshan before Ram Lalla' },
+          { order: 2, name: 'Dashrath Mahal', town: 'Ayodhya', deity: 'Royal Palace Shrine', highlight: 'Historic courtyard & evening bhajan' },
+          { order: 3, name: 'Shri Ram Janmabhoomi Mandir', town: 'Ayodhya', deity: 'Ram Lalla', highlight: 'Mangala / Shringar / Sandhya Aarti & Sugam Pass' },
+          { order: 4, name: 'Surya Kund & Ram Ki Paidi', town: 'Ayodhya', deity: 'Sarayu Ghat', highlight: 'Evening Sarayu Aarti & Ramayana laser show' },
+        ],
+        duration_days: 3,
+        image_url: '/src/assets/images/ayodhya_ram_mandir_1795712703190.jpg',
+        booking_status: 'LIVE_NOW',
+        window_label: 'Daily Ram Lalla Sugam Window',
+        window_opens_at: '2026-11-26',
+        slots_total: 160,
+        slots_remaining: 33,
+        price_seva: 3600,
+        price_parivar: 7900,
+        price_rajasi: 17900,
+        summary: 'Dedicated Ayodhya yatra covering Hanuman Garhi, Dashrath Mahal, Ram Janmabhoomi Mandir, and Surya Kund with Vande Bharat rail sync and senior e-cart care.',
+        highlights: [
+          'Free Wheelchair & Battery Golf Cart inside Janmabhoomi Path',
+          'Includes Ayodhya Dham Vande Bharat & Kaifiyat Express train options',
+          'Sarayu Ghat evening aarti & pure satvik meals',
+        ],
+        default_itinerary: [
+          {
+            day: 1,
+            title: 'Hanuman Garhi, Dashrath Mahal & Ram Mandir',
+            morning_ritual: 'Ayodhya Dham station arrival & check-in',
+            darshan_window: '09:00 AM Hanuman Garhi · 11:00 AM Dashrath Mahal · 04:00 PM Ram Lalla',
+            evening_program: 'Sarayu Ram Ki Paidi evening Aarti',
+            included: true,
+          },
+          {
+            day: 2,
+            title: 'Kanak Bhawan, Surya Kund & Guptar Ghat',
+            morning_ritual: '06:30 AM Shringar Darshan & Kanak Bhawan',
+            darshan_window: '10:30 AM Kanak Bhawan · 04:30 PM Surya Kund',
+            evening_program: 'Satvik dinner & rest',
+            included: true,
+          },
+          {
+            day: 3,
+            title: 'Nageshwarnath Temple & Return Departure',
+            morning_ritual: 'Morning Sarayu darshan & Nageshwarnath Mandir',
+            darshan_window: '08:00 AM Nageshwarnath',
+            evening_program: 'Ayodhya Dham Jn rail departure',
+            included: true,
+          },
+        ],
+      };
+
+      db.prepare(`
+        INSERT OR IGNORE INTO circuits (
+          id, slug, title, category, region, deity, temples_json, duration_days,
+          image_url, booking_status, window_label, window_opens_at, slots_total,
+          slots_remaining, price_seva, price_parivar, price_rajasi, summary,
+          highlights_json, default_itinerary_json
+        ) VALUES (
+          @id, @slug, @title, @category, @region, @deity, @temples_json, @duration_days,
+          @image_url, @booking_status, @window_label, @window_opens_at, @slots_total,
+          @slots_remaining, @price_seva, @price_parivar, @price_rajasi, @summary,
+          @highlights_json, @default_itinerary_json
+        )
+      `).run({
+        id: ayodhyaCircuit.id,
+        slug: ayodhyaCircuit.slug,
+        title: ayodhyaCircuit.title,
+        category: ayodhyaCircuit.category,
+        region: ayodhyaCircuit.region,
+        deity: ayodhyaCircuit.deity,
+        temples_json: JSON.stringify(ayodhyaCircuit.temples),
+        duration_days: ayodhyaCircuit.duration_days,
+        image_url: ayodhyaCircuit.image_url,
+        booking_status: ayodhyaCircuit.booking_status,
+        window_label: ayodhyaCircuit.window_label,
+        window_opens_at: ayodhyaCircuit.window_opens_at,
+        slots_total: ayodhyaCircuit.slots_total,
+        slots_remaining: ayodhyaCircuit.slots_remaining,
+        price_seva: ayodhyaCircuit.price_seva,
+        price_parivar: ayodhyaCircuit.price_parivar,
+        price_rajasi: ayodhyaCircuit.price_rajasi,
+        summary: ayodhyaCircuit.summary,
+        highlights_json: JSON.stringify(ayodhyaCircuit.highlights),
+        default_itinerary_json: JSON.stringify(ayodhyaCircuit.default_itinerary),
+      });
+
+      const insD = db.prepare(`
+        INSERT OR IGNORE INTO darshan_slots (id, circuit_id, slot_name, slot_time, tier_access, surcharge, seats_remaining, is_vip)
+        VALUES (@id, @circuit_id, @slot_name, @slot_time, @tier_access, @surcharge, @seats_remaining, @is_vip)
+      `);
+      insD.run({
+        id: 'ayodhya-mangala',
+        circuit_id: ayodhyaCircuit.id,
+        slot_name: 'Mangala / Shringar Morning Pass',
+        slot_time: '06:30 AM – 08:30 AM',
+        tier_access: 'ALL',
+        surcharge: 0,
+        seats_remaining: 40,
+        is_vip: 0,
+      });
+      insD.run({
+        id: 'ayodhya-sandhya',
+        circuit_id: ayodhyaCircuit.id,
+        slot_name: 'Sandhya Aarti & Sugam E-Cart Priority',
+        slot_time: '06:30 PM – 08:00 PM',
+        tier_access: 'PARIVAR_PLUS',
+        surcharge: 450,
+        seats_remaining: 24,
+        is_vip: 1,
+      });
+
+      const insS = db.prepare(`
+        INSERT OR IGNORE INTO stays (id, circuit_id, name, tier, stay_type, distance_to_temple, meal_plan, price_per_night)
+        VALUES (@id, @circuit_id, @name, @tier, @stay_type, @distance_to_temple, @meal_plan, @price_per_night)
+      `);
+      insS.run({
+        id: 'ayodhya-stay-seva',
+        circuit_id: ayodhyaCircuit.id,
+        name: 'Ramkot Pilgrim Bhakta Niwas',
+        tier: 'SEVA',
+        stay_type: 'Clean Ground & Lift Family Guest House',
+        distance_to_temple: '300m from Janmabhoomi Path',
+        meal_plan: 'Pure Veg Satvik Thali',
+        price_per_night: 750,
+      });
+      insS.run({
+        id: 'ayodhya-stay-parivar',
+        circuit_id: ayodhyaCircuit.id,
+        name: 'Sarayu Heritage Family Stay',
+        tier: 'PARIVAR',
+        stay_type: '3-Star AC Hotel with E-Rickshaw',
+        distance_to_temple: '450m near Ram Ki Paidi',
+        meal_plan: 'Breakfast & Satvik Dinner',
+        price_per_night: 2400,
+      });
+      insS.run({
+        id: 'ayodhya-stay-rajasi',
+        circuit_id: ayodhyaCircuit.id,
+        name: 'Avadh Sanctuary Retreat',
+        tier: 'RAJASI',
+        stay_type: '5-Star Peaceful Garden Suite',
+        distance_to_temple: 'Private Drop to PFC Gate',
+        meal_plan: 'All-Day Satvik Kitchen',
+        price_per_night: 6200,
+      });
+
+      db.prepare(`
+        INSERT OR IGNORE INTO train_routes (
+          id, circuit_id, train_number, train_name, origin_city, arrival_station,
+          departure_time, arrival_time, duration_text, classes_json, live_status
+        ) VALUES (
+          @id, @circuit_id, @train_number, @train_name, @origin_city, @arrival_station,
+          @departure_time, @arrival_time, @duration_text, @classes_json, @live_status
+        )
+      `).run({
+        id: 'tr-ayodhya-vb',
+        circuit_id: ayodhyaCircuit.id,
+        train_number: '22426',
+        train_name: 'Anand Vihar – Ayodhya Dham Vande Bharat',
+        origin_city: 'Delhi (ANVT)',
+        arrival_station: 'Ayodhya Dham (AY)',
+        departure_time: '06:10',
+        arrival_time: '14:30',
+        duration_text: '8h 20m',
+        classes_json: JSON.stringify([
+          { code: 'CC', label: 'Chair Car', fare: 1620, available: 34 },
+          { code: 'EC', label: 'Executive Chair', fare: 2990, available: 10 },
+        ]),
+        live_status: 'Daily Direct Vande Bharat',
+      });
+    }
+
+    const dwarkaExists = db
+      .prepare('SELECT id FROM circuits WHERE id = ?')
+      .get('dwarka-somnath-gujarat');
+
+    if (!dwarkaExists) {
+      const dwarkaCircuit = {
+        id: 'dwarka-somnath-gujarat',
+        slug: 'dwarka-somnath-gujarat-yatra',
+        title: 'Dwarka & Somnath Sacred Gujarat Yatra',
+        category: 'Char Dham',
+        region: 'Gujarat (Dwarka · Bet Dwarka · Somnath)',
+        deity: 'Shri Dwarkadhish Krishna & Somnath Jyotirlinga',
+        temples: [
+          { order: 1, name: 'Shri Dwarkadhish Jagat Mandir', town: 'Dwarka', deity: 'Lord Krishna', highlight: 'Western Char Dham & sacred Dhaja ceremony' },
+          { order: 2, name: 'Nageshwar Jyotirlinga & Bet Dwarka', town: 'Dwarka', deity: 'Nageshwar Shiva', highlight: '8th Jyotirlinga & Sudarshan Setu island crossing' },
+          { order: 3, name: 'Shri Somnath Jyotirlinga', town: 'Prabhas Patan', deity: 'First Jyotirlinga', highlight: 'Arabian Sea shore temple & light-and-sound evening' },
+        ],
+        duration_days: 4,
+        image_url: '/src/assets/images/dwarka_temple_1795712703669.jpg',
+        booking_status: 'LIVE_NOW',
+        window_label: 'Winter Coastal Char Dham Open',
+        window_opens_at: '2026-11-26',
+        slots_total: 130,
+        slots_remaining: 29,
+        price_seva: 4400,
+        price_parivar: 9100,
+        price_rajasi: 19600,
+        summary: 'Western Char Dham & First Jyotirlinga coastal pilgrimage combining Dwarkadhish, Nageshwar, Bet Dwarka via Sudarshan Setu, and Somnath Express rail.',
+        highlights: [
+          'Moksha Dwar step-free wheelchair entry at Dwarkadhish',
+          'Includes Somnath Express & Saurashtra Mail rail coordination',
+          'Pure Kathiyawadi / Gujarati Satvik Bhojan included',
+        ],
+        default_itinerary: [
+          {
+            day: 1,
+            title: 'Dwarka Arrival & Evening Dhaja Darshan',
+            morning_ritual: 'Dwarka station pickup & Gomti Ghat check-in',
+            darshan_window: '05:30 PM Dwarkadhish Temple · 07:30 PM Sandhya Aarti',
+            evening_program: 'Gomti Ghat lamps & Gujarati satvik dinner',
+            included: true,
+          },
+          {
+            day: 2,
+            title: 'Nageshwar Jyotirlinga & Bet Dwarka',
+            morning_ritual: 'Morning Rukmini Devi Mandir',
+            darshan_window: '09:30 AM Nageshwar Jyotirlinga · 12:00 PM Bet Dwarka',
+            evening_program: 'Sunset along Bhadkeshwar Mahadev point',
+            included: true,
+          },
+          {
+            day: 3,
+            title: 'Porbandar Sudamapuri to Somnath Jyotirlinga',
+            morning_ritual: 'Coastal highway drive via Sudama Temple',
+            darshan_window: '05:00 PM Somnath Jyotirlinga · 07:00 PM Evening Aarti',
+            evening_program: 'Sound & light show overlooking Arabian Sea',
+            included: true,
+          },
+          {
+            day: 4,
+            title: 'Bhalka Tirth & Rail Departure',
+            morning_ritual: 'Pratah Somnath Darshan & Triveni Sangam',
+            darshan_window: '08:30 AM Bhalka Tirth',
+            evening_program: 'Veraval / Rajkot rail departure',
+            included: true,
+          },
+        ],
+      };
+
+      db.prepare(`
+        INSERT OR IGNORE INTO circuits (
+          id, slug, title, category, region, deity, temples_json, duration_days,
+          image_url, booking_status, window_label, window_opens_at, slots_total,
+          slots_remaining, price_seva, price_parivar, price_rajasi, summary,
+          highlights_json, default_itinerary_json
+        ) VALUES (
+          @id, @slug, @title, @category, @region, @deity, @temples_json, @duration_days,
+          @image_url, @booking_status, @window_label, @window_opens_at, @slots_total,
+          @slots_remaining, @price_seva, @price_parivar, @price_rajasi, @summary,
+          @highlights_json, @default_itinerary_json
+        )
+      `).run({
+        id: dwarkaCircuit.id,
+        slug: dwarkaCircuit.slug,
+        title: dwarkaCircuit.title,
+        category: dwarkaCircuit.category,
+        region: dwarkaCircuit.region,
+        deity: dwarkaCircuit.deity,
+        temples_json: JSON.stringify(dwarkaCircuit.temples),
+        duration_days: dwarkaCircuit.duration_days,
+        image_url: dwarkaCircuit.image_url,
+        booking_status: dwarkaCircuit.booking_status,
+        window_label: dwarkaCircuit.window_label,
+        window_opens_at: dwarkaCircuit.window_opens_at,
+        slots_total: dwarkaCircuit.slots_total,
+        slots_remaining: dwarkaCircuit.slots_remaining,
+        price_seva: dwarkaCircuit.price_seva,
+        price_parivar: dwarkaCircuit.price_parivar,
+        price_rajasi: dwarkaCircuit.price_rajasi,
+        summary: dwarkaCircuit.summary,
+        highlights_json: JSON.stringify(dwarkaCircuit.highlights),
+        default_itinerary_json: JSON.stringify(dwarkaCircuit.default_itinerary),
+      });
+
+      const insD = db.prepare(`
+        INSERT OR IGNORE INTO darshan_slots (id, circuit_id, slot_name, slot_time, tier_access, surcharge, seats_remaining, is_vip)
+        VALUES (@id, @circuit_id, @slot_name, @slot_time, @tier_access, @surcharge, @seats_remaining, @is_vip)
+      `);
+      insD.run({
+        id: 'dwarka-mangala',
+        circuit_id: dwarkaCircuit.id,
+        slot_name: 'Mangala Morning & Moksha Dwar Ramp Pass',
+        slot_time: '06:30 AM – 08:30 AM',
+        tier_access: 'ALL',
+        surcharge: 0,
+        seats_remaining: 42,
+        is_vip: 0,
+      });
+      insD.run({
+        id: 'dwarka-sandhya',
+        circuit_id: dwarkaCircuit.id,
+        slot_name: 'Sandhya Dhaja & Somnath Priority Mandapam',
+        slot_time: '06:30 PM – 08:30 PM',
+        tier_access: 'PARIVAR_PLUS',
+        surcharge: 500,
+        seats_remaining: 20,
+        is_vip: 1,
+      });
+
+      const insS = db.prepare(`
+        INSERT OR IGNORE INTO stays (id, circuit_id, name, tier, stay_type, distance_to_temple, meal_plan, price_per_night)
+        VALUES (@id, @circuit_id, @name, @tier, @stay_type, @distance_to_temple, @meal_plan, @price_per_night)
+      `);
+      insS.run({
+        id: 'dwarka-stay-seva',
+        circuit_id: dwarkaCircuit.id,
+        name: 'Gomti Pilgrim Bhakta Niwas',
+        tier: 'SEVA',
+        stay_type: 'Clean Ground & Lift Yatri Stay',
+        distance_to_temple: '200m from Moksha Dwar',
+        meal_plan: 'Pure Veg Gujarati Thali',
+        price_per_night: 700,
+      });
+      insS.run({
+        id: 'dwarka-stay-parivar',
+        circuit_id: dwarkaCircuit.id,
+        name: 'Dwarka Coastline Family Residency',
+        tier: 'PARIVAR',
+        stay_type: '3-Star AC Stay with Shuttle',
+        distance_to_temple: '350m from Jagat Mandir',
+        meal_plan: 'Breakfast & Satvik Dinner',
+        price_per_night: 2300,
+      });
+      insS.run({
+        id: 'dwarka-stay-rajasi',
+        circuit_id: dwarkaCircuit.id,
+        name: 'Dwarkadhish Seafront Sanctuary',
+        tier: 'RAJASI',
+        stay_type: '5-Star Coastal Suite',
+        distance_to_temple: 'Private Cart to Temple Gate',
+        meal_plan: 'All-Day Satvik Kitchen',
+        price_per_night: 6000,
+      });
+
+      db.prepare(`
+        INSERT OR IGNORE INTO train_routes (
+          id, circuit_id, train_number, train_name, origin_city, arrival_station,
+          departure_time, arrival_time, duration_text, classes_json, live_status
+        ) VALUES (
+          @id, @circuit_id, @train_number, @train_name, @origin_city, @arrival_station,
+          @departure_time, @arrival_time, @duration_text, @classes_json, @live_status
+        )
+      `).run({
+        id: 'tr-saurashtra-mail',
+        circuit_id: dwarkaCircuit.id,
+        train_number: '22945',
+        train_name: 'Saurashtra Mail SF Express',
+        origin_city: 'Mumbai Central (MMCT)',
+        arrival_station: 'Dwarka (DWK)',
+        departure_time: '21:05',
+        arrival_time: '13:45',
+        duration_text: '16h 40m',
+        classes_json: JSON.stringify([
+          { code: 'SL', label: 'Sleeper', fare: 485, available: 45 },
+          { code: '3A', label: 'AC 3 Tier', fare: 1290, available: 22 },
+          { code: '2A', label: 'AC 2 Tier', fare: 1850, available: 9 },
+        ]),
+        live_status: 'Direct Mumbai – Dwarka Express',
+      });
+    }
+  });
+  syncTx();
+}
+
+ensureUniversalSeedData();
+
+function mapTempleRow(row: Record<string, unknown>): TempleDirectoryEntry {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    tradition: row.tradition as TempleDirectoryEntry['tradition'],
+    location: String(row.location),
+    state: String(row.state),
+    deity_or_focus: String(row.deity_or_focus),
+    darshan_timings: String(row.darshan_timings),
+    aarti_timings: String(row.aarti_timings),
+    opening_closing: String(row.opening_closing),
+    online_booking_info: String(row.online_booking_info),
+    entry_requirements: String(row.entry_requirements),
+    dress_code: String(row.dress_code),
+    photography_rules: String(row.photography_rules),
+    festivals: JSON.parse(String(row.festivals_json)),
+    official_website: String(row.official_website),
+    source_authority: String(row.source_authority),
+    crowd_weekday: String(row.crowd_weekday),
+    crowd_weekend: String(row.crowd_weekend),
+    crowd_festival: String(row.crowd_festival),
+    recommended_visit_window: String(row.recommended_visit_window),
+    special_darshan_notes: String(row.special_darshan_notes),
+    wheelchair_accessible: Number(row.wheelchair_accessible),
+    ramps_and_lifts: String(row.ramps_and_lifts),
+    walking_distance_note: String(row.walking_distance_note),
+    resting_zones: String(row.resting_zones),
+    medical_facility: String(row.medical_facility),
+    nearby_pharmacy: String(row.nearby_pharmacy),
+    emergency_contact: String(row.emergency_contact),
+    history_summary: String(row.history_summary),
+    significance_summary: String(row.significance_summary),
+    rituals_summary: String(row.rituals_summary),
+    faqs: JSON.parse(String(row.faqs_json)),
+    image_url: String(row.image_url),
+  };
+}
+
+export function listTemples(): TempleDirectoryEntry[] {
+  const rows = db.prepare('SELECT * FROM temples_directory ORDER BY name ASC').all() as Record<string, unknown>[];
+  return rows.map(mapTempleRow);
+}
+
+export function getTempleById(templeId: string): TempleDirectoryEntry | null {
+  const row = db.prepare('SELECT * FROM temples_directory WHERE id = ?').get(templeId) as Record<string, unknown> | undefined;
+  return row ? mapTempleRow(row) : null;
+}
+
 function mapCircuitRow(row: Record<string, unknown>): CircuitSummary {
   return {
     id: String(row.id),
@@ -1095,6 +2142,27 @@ export function listRecentBookings(limit = 8): BookingRecord[] {
        LIMIT ?`
     )
     .all(limit) as Record<string, unknown>[];
+
+  return rows.map(hydrateBookingRow);
+}
+
+export function listBookingsForUser(userId: string, email: string): BookingRecord[] {
+  const rows = db
+    .prepare(
+      `SELECT b.*, c.title as circuit_title, c.region as circuit_region, c.image_url as circuit_image_url,
+              d.slot_name as darshan_slot_name, d.slot_time as darshan_slot_time,
+              t.train_number as train_number, t.train_name as train_name,
+              t.origin_city as train_origin, t.arrival_station as train_arrival,
+              s.name as stay_name, s.distance_to_temple as stay_distance
+       FROM bookings b
+       JOIN circuits c ON c.id = b.circuit_id
+       LEFT JOIN darshan_slots d ON d.id = b.darshan_slot_id
+       LEFT JOIN train_routes t ON t.id = b.train_route_id
+       LEFT JOIN stays s ON s.id = b.stay_id
+       WHERE b.user_id = ? OR LOWER(b.pilgrim_email) = LOWER(?)
+       ORDER BY b.created_at DESC`
+    )
+    .all(userId, email) as Record<string, unknown>[];
 
   return rows.map(hydrateBookingRow);
 }

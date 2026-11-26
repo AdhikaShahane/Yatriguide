@@ -46,8 +46,8 @@ export function buildTicketEmailHtml(payload: TicketEmailPayload): {
       : 'Confirmed Yatra E-Ticket & Darshan Pass';
 
   const subject = payload.updateHeadline
-    ? `[TeerthSutra Update · ${payload.pnr}] ${payload.updateHeadline}`
-    : `[TeerthSutra] ${modeLabel} — ${payload.circuitTitle} (${payload.pnr})`;
+    ? `[Yatriguide Update · ${payload.pnr}] ${payload.updateHeadline}`
+    : `[Yatriguide] ${modeLabel} — ${payload.circuitTitle} (${payload.pnr})`;
 
   const formattedFare = new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -75,7 +75,7 @@ export function buildTicketEmailHtml(payload: TicketEmailPayload): {
 <body style="margin:0;padding:24px;background-color:#faf6ee;font-family:'Helvetica Neue',Arial,sans-serif;color:#241914;">
   <div style="max-width:640px;margin:0 auto;background:#fffdf9;border:1px solid #e2ceb5;border-radius:10px;overflow:hidden;">
     <div style="background:#6b1d1d;color:#fffdf9;padding:22px 26px;border-bottom:3px solid #d95d16;">
-      <div style="font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:#f5cfa0;">TeerthSutra Sacred Yatra Pass</div>
+      <div style="font-size:12px;letter-spacing:1.4px;text-transform:uppercase;color:#f5cfa0;">Yatriguide Sacred Yatra Pass</div>
       <h1 style="margin:6px 0 4px;font-size:24px;font-family:Georgia,serif;font-weight:700;">${escapeHtml(payload.circuitTitle)}</h1>
       <div style="font-size:13px;color:#f7e8d6;">${escapeHtml(modeLabel)} · PNR <strong style="color:#ffffff;">${escapeHtml(payload.pnr)}</strong></div>
     </div>

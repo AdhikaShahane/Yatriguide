@@ -2,10 +2,15 @@ export type PackageTier = 'SEVA' | 'PARIVAR' | 'RAJASI';
 
 export type BookingWindowStatus = 'LIVE_NOW' | 'PRE_BOOKING' | 'FILLING_FAST';
 
+export type PilgrimCareMode = 'SOLO_YOUTH' | 'ELDERLY_CARE' | 'FAMILY_KIDS';
+
+export type TraditionScope = 'Hindu' | 'Buddhist' | 'Universal / Multi-Faith';
+
 export type CircuitCategory =
   | 'Ashtavinayak'
   | 'Jyotirlinga'
   | 'Char Dham'
+  | 'Buddhist Circuit'
   | 'Regional Teerth'
   | 'South Divya Desam';
 
@@ -97,6 +102,74 @@ export interface CircuitDetail extends CircuitSummary {
   darshan_slots: DarshanSlot[];
   train_routes: TrainRoute[];
   stays: StayOption[];
+}
+
+export interface TempleFaq {
+  question: string;
+  answer: string;
+}
+
+export interface TempleDirectoryEntry {
+  id: string;
+  name: string;
+  tradition: TraditionScope;
+  location: string;
+  state: string;
+  deity_or_focus: string;
+  darshan_timings: string;
+  aarti_timings: string;
+  opening_closing: string;
+  online_booking_info: string;
+  entry_requirements: string;
+  dress_code: string;
+  photography_rules: string;
+  festivals: string[];
+  official_website: string;
+  source_authority: string;
+  crowd_weekday: string;
+  crowd_weekend: string;
+  crowd_festival: string;
+  recommended_visit_window: string;
+  special_darshan_notes: string;
+  wheelchair_accessible: number;
+  ramps_and_lifts: string;
+  walking_distance_note: string;
+  resting_zones: string;
+  medical_facility: string;
+  nearby_pharmacy: string;
+  emergency_contact: string;
+  history_summary: string;
+  significance_summary: string;
+  rituals_summary: string;
+  faqs: TempleFaq[];
+  image_url: string;
+}
+
+export interface PlannedDayItem {
+  day: number;
+  headline: string;
+  temples_covered: string[];
+  verified_darshan_window: string;
+  walking_and_rest_plan: string;
+  transport_note: string;
+  meal_and_hydration: string;
+}
+
+export interface PlannedItineraryResult {
+  title: string;
+  care_mode_summary: string;
+  recommended_circuit_id?: string;
+  estimated_budget_inr: {
+    stay: number;
+    transport: number;
+    darshan_and_seva: number;
+    meals_and_local: number;
+    total: number;
+  };
+  days: PlannedDayItem[];
+  accessibility_and_care_notes: string[];
+  precautions: string[];
+  offline_ready_contacts: string[];
 }
 
 export interface BookingUpdate {
