@@ -126,7 +126,7 @@ const POPULAR_DESTINATIONS: {
 ];
 
 export default function App() {
-  const [activePage, setActivePage] = useState<ActivePage>('HOME');
+  const [activePage, setActivePage] = useState<ActivePage>('AUTH');
 
   // Auth state kept strictly in React memory (Bearer token, never localStorage)
   const [authToken, setAuthToken] = useState<string>('');
@@ -182,13 +182,12 @@ export default function App() {
   }, []);
 
   const fetchRecentBookings = useCallback(async (tokenOverride?: string) => {
+    const tokenToUse = tokenOverride ?? authToken;
+    if (!tokenToUse) return;
     try {
-      const tokenToUse = tokenOverride ?? authToken;
-      const headers: Record<string, string> = {};
-      if (tokenToUse) {
-        headers.Authorization = `Bearer ${tokenToUse}`;
-      }
-      const res = await fetch('/api/bookings', { headers });
+      const res = await fetch('/api/bookings', {
+        headers: { Authorization: `Bearer ${tokenToUse}` },
+      });
       if (!res.ok) return;
       const data = await res.json();
       const list: BookingRecord[] = data.bookings ?? [];
@@ -205,8 +204,7 @@ export default function App() {
   useEffect(() => {
     fetchCircuits();
     fetchTemples();
-    fetchRecentBookings();
-  }, [fetchCircuits, fetchTemples, fetchRecentBookings]);
+  }, [fetchCircuits, fetchTemples]);
 
   // Real-time seat count refresh
   useEffect(() => {
@@ -216,7 +214,9 @@ export default function App() {
         const parsed = JSON.parse(evt.data) as LiveFeedEvent;
         if (parsed.type !== 'HEARTBEAT') {
           fetchCircuits();
-          fetchRecentBookings();
+          if (authToken) {
+            fetchRecentBookings();
+          }
         }
       } catch {
         // Ignore malformed frame
@@ -225,9 +225,14 @@ export default function App() {
     return () => {
       source.close();
     };
-  }, [fetchCircuits, fetchRecentBookings]);
+  }, [fetchCircuits, fetchRecentBookings, authToken]);
 
   const navigateTo = (page: ActivePage) => {
+    if (!currentUser && page !== 'AUTH') {
+      setActivePage('AUTH');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setActivePage(page);
     if (page !== 'HOME') {
       setSelectedCircuitDetail(null);
@@ -241,14 +246,19 @@ export default function App() {
     setCurrentUser(user);
     setCareMode(user.care_mode);
     fetchRecentBookings(token);
-    navigateTo('HOME');
+    setActivePage('HOME');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSignOut = () => {
     setAuthToken('');
     setCurrentUser(null);
-    fetchRecentBookings('');
-    navigateTo('HOME');
+    setBookings([]);
+    setActiveBooking(null);
+    setSelectedCircuitDetail(null);
+    setSelectedCircuitId(null);
+    setActivePage('AUTH');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSelectCircuit = async (circuit: CircuitSummary) => {
@@ -285,7 +295,13 @@ export default function App() {
   };
 
   const handleSearchBooking = async (query: string) => {
-    const res = await fetch(`/api/bookings?q=${encodeURIComponent(query)}`);
+    const headers: Record<string, string> = {};
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    const res = await fetch(`/api/bookings?q=${encodeURIComponent(query)}`, {
+      headers,
+    });
     if (!res.ok) return;
     const data = await res.json();
     const matches: BookingRecord[] = data.bookings ?? [];
@@ -363,66 +379,78 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FAF6EE] text-[#241914]">
-      {/* Strict 3-Zone Top Bar Contract */}
+      {/* Strict Top Bar: Welcome header before login, full navigation after login */}
       <header className="sticky top-0 z-30 border-b border-[#E6D7C3] bg-[#FAF6EE]/95 backdrop-blur-xs">
         <div className="mx-auto flex max-w-[1160px] items-center justify-between gap-8 px-4 py-4 sm:px-6">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedCircuitDetail(null);
-              setSelectedCircuitId(null);
-              navigateTo('HOME');
-            }}
-            className="font-display text-2xl font-bold tracking-tight text-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Yatriguide
-          </button>
-
-          <nav
-            aria-label="Primary"
-            className="hidden md:flex items-center gap-7 text-sm font-medium text-[#685649]"
-          >
-            {[
-              { id: 'HOME' as const, label: 'Home & Packages' },
-              { id: 'PLANNER' as const, label: 'Plan My Trip' },
-              { id: 'GUIDE' as const, label: 'Temple Guide' },
-              { id: 'TICKETS' as const, label: 'My Tickets' },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCircuitDetail(null);
-                  setSelectedCircuitId(null);
-                  navigateTo(item.id);
-                }}
-                className={`transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  activePage === item.id
-                    ? 'font-semibold text-[#6B1D1D] underline underline-offset-8 decoration-2 decoration-[#D95D16]'
-                    : 'hover:text-[#6B1D1D]'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="shrink-0">
+          {currentUser ? (
             <button
               type="button"
-              onClick={() => navigateTo('AUTH')}
-              className="rounded-md bg-[#D95D16] px-4 py-2 text-sm font-semibold text-[#FFFDF9] transition-colors duration-150 hover:bg-[#B84A0D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() => {
+                setSelectedCircuitDetail(null);
+                setSelectedCircuitId(null);
+                navigateTo('HOME');
+              }}
+              className="font-display text-2xl font-bold tracking-tight text-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
             >
-              {currentUser ? `Namaste, ${firstName}` : 'Sign In'}
+              Yatriguide
             </button>
+          ) : (
+            <span className="font-display text-2xl font-bold tracking-tight text-[#6B1D1D] whitespace-nowrap shrink-0">
+              Yatriguide
+            </span>
+          )}
+
+          {currentUser && (
+            <nav
+              aria-label="Primary"
+              className="hidden md:flex items-center gap-7 text-sm font-medium text-[#685649]"
+            >
+              {[
+                { id: 'HOME' as const, label: 'Home & Packages' },
+                { id: 'PLANNER' as const, label: 'Plan My Trip' },
+                { id: 'GUIDE' as const, label: 'Temple Guide' },
+                { id: 'TICKETS' as const, label: 'My Tickets' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCircuitDetail(null);
+                    setSelectedCircuitId(null);
+                    navigateTo(item.id);
+                  }}
+                  className={`transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    activePage === item.id
+                      ? 'font-semibold text-[#6B1D1D] underline underline-offset-8 decoration-2 decoration-[#D95D16]'
+                      : 'hover:text-[#6B1D1D]'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          <div className="shrink-0">
+            {currentUser ? (
+              <button
+                type="button"
+                onClick={() => navigateTo('AUTH')}
+                className="rounded-md bg-[#D95D16] px-4 py-2 text-sm font-semibold text-[#FFFDF9] transition-colors duration-150 hover:bg-[#B84A0D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6B1D1D] whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                {`Namaste, ${firstName}`}
+              </button>
+            ) : (
+              <span className="text-xs font-semibold text-[#685649] whitespace-nowrap">
+                Pilgrim Sign-In Portal
+              </span>
+            )}
           </div>
         </div>
-
-        {/* Mobile screens use fixed Android-style bottom navigation bar below */}
       </header>
 
-      <main className="flex-1 pb-20 md:pb-0">
-        {activePage === 'AUTH' && (
+      <main className={currentUser ? 'flex-1 pb-20 md:pb-0' : 'flex-1'}>
+        {(!currentUser || activePage === 'AUTH') && (
           <AuthPage
             currentUser={currentUser}
             onAuthSuccess={handleAuthSuccess}
@@ -432,7 +460,7 @@ export default function App() {
           />
         )}
 
-        {activePage === 'PLANNER' && (
+        {currentUser && activePage === 'PLANNER' && (
           <PilgrimPlanner
             careMode={careMode}
             onCareModeChange={setCareMode}
@@ -440,7 +468,7 @@ export default function App() {
           />
         )}
 
-        {activePage === 'GUIDE' && (
+        {currentUser && activePage === 'GUIDE' && (
           <>
             <TempleGuideHub
               temples={temples}
@@ -457,7 +485,7 @@ export default function App() {
           </>
         )}
 
-        {activePage === 'TICKETS' && (
+        {currentUser && activePage === 'TICKETS' && (
           <YatraPassDesk
             bookings={bookings}
             activeBooking={activeBooking}
@@ -467,7 +495,7 @@ export default function App() {
           />
         )}
 
-        {activePage === 'HOME' && selectedCircuitDetail && (
+        {currentUser && activePage === 'HOME' && selectedCircuitDetail && (
           <YatraConfigurator
             circuitDetail={selectedCircuitDetail}
             currentUser={currentUser}
@@ -485,7 +513,7 @@ export default function App() {
           />
         )}
 
-        {activePage === 'HOME' && !selectedCircuitDetail && (
+        {currentUser && activePage === 'HOME' && !selectedCircuitDetail && (
           <>
             {/* Signature Curved Orange-Red YatriGuide Banner (Inspired by Figma Android Compact 4) */}
             <section className="mx-auto max-w-[1160px] px-0 sm:px-6 sm:pt-5">
@@ -817,39 +845,41 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile Android-Style Bottom Navigation Bar */}
-      <nav
-        aria-label="Mobile Bottom Navigation"
-        className="fixed bottom-0 inset-x-0 z-30 flex md:hidden items-center justify-around border-t border-[#E6D7C3] bg-[#FFFDF9]/98 py-1.5 shadow-sm"
-      >
-        {[
-          { id: 'HOME' as const, label: 'Explore', icon: Home },
-          { id: 'PLANNER' as const, label: 'Plan', icon: Compass },
-          { id: 'GUIDE' as const, label: 'Temples', icon: BookOpen },
-          { id: 'TICKETS' as const, label: 'Tickets', icon: Ticket },
-          { id: 'AUTH' as const, label: currentUser ? 'Account' : 'Sign In', icon: User },
-        ].map((item) => {
-          const Icon = item.icon;
-          const active = activePage === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                setSelectedCircuitDetail(null);
-                setSelectedCircuitId(null);
-                navigateTo(item.id);
-              }}
-              className={`flex flex-col items-center gap-0.5 rounded-md px-3 py-1 text-[11px] font-semibold cursor-pointer ${
-                active ? 'text-[#D95D16]' : 'text-[#685649]'
-              }`}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      {/* Mobile Android-Style Bottom Navigation Bar (only after Sign In) */}
+      {currentUser && (
+        <nav
+          aria-label="Mobile Bottom Navigation"
+          className="fixed bottom-0 inset-x-0 z-30 flex md:hidden items-center justify-around border-t border-[#E6D7C3] bg-[#FFFDF9]/98 py-1.5 shadow-sm"
+        >
+          {[
+            { id: 'HOME' as const, label: 'Explore', icon: Home },
+            { id: 'PLANNER' as const, label: 'Plan', icon: Compass },
+            { id: 'GUIDE' as const, label: 'Temples', icon: BookOpen },
+            { id: 'TICKETS' as const, label: 'Tickets', icon: Ticket },
+            { id: 'AUTH' as const, label: 'Account', icon: User },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = activePage === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCircuitDetail(null);
+                  setSelectedCircuitId(null);
+                  navigateTo(item.id);
+                }}
+                className={`flex flex-col items-center gap-0.5 rounded-md px-3 py-1 text-[11px] font-semibold cursor-pointer ${
+                  active ? 'text-[#D95D16]' : 'text-[#685649]'
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       <footer className="hidden md:block border-t border-[#E6D7C3] bg-[#F3EBDD]">
         <div className="mx-auto flex max-w-[1160px] flex-col justify-between gap-4 px-4 py-7 text-xs text-[#685649] sm:flex-row sm:items-center sm:px-6">
@@ -861,36 +891,38 @@ export default function App() {
               Your Simple Companion for Every Sacred Journey
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-5">
-            <button
-              type="button"
-              onClick={() => navigateTo('HOME')}
-              className="hover:text-[#241914] cursor-pointer"
-            >
-              Packages
-            </button>
-            <button
-              type="button"
-              onClick={() => navigateTo('PLANNER')}
-              className="hover:text-[#241914] cursor-pointer"
-            >
-              Plan Trip
-            </button>
-            <button
-              type="button"
-              onClick={() => navigateTo('GUIDE')}
-              className="hover:text-[#241914] cursor-pointer"
-            >
-              Temple Guide
-            </button>
-            <button
-              type="button"
-              onClick={() => navigateTo('AUTH')}
-              className="hover:text-[#241914] cursor-pointer"
-            >
-              {currentUser ? 'My Account' : 'Sign In / Sign Up'}
-            </button>
-          </div>
+          {currentUser && (
+            <div className="flex flex-wrap items-center gap-5">
+              <button
+                type="button"
+                onClick={() => navigateTo('HOME')}
+                className="hover:text-[#241914] cursor-pointer"
+              >
+                Packages
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('PLANNER')}
+                className="hover:text-[#241914] cursor-pointer"
+              >
+                Plan Trip
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('GUIDE')}
+                className="hover:text-[#241914] cursor-pointer"
+              >
+                Temple Guide
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('AUTH')}
+                className="hover:text-[#241914] cursor-pointer"
+              >
+                My Account
+              </button>
+            </div>
+          )}
         </div>
       </footer>
     </div>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye, EyeOff, LogOut, UserCheck } from 'lucide-react';
+import { Eye, EyeOff, LogOut, ShieldCheck, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { PilgrimCareMode } from '../types/pilgrimage';
 
@@ -148,35 +148,27 @@ export function AuthPage({
   };
 
   return (
-    <section className="mx-auto max-w-[920px] px-4 py-8 sm:px-6">
-      <button
-        type="button"
-        onClick={onBackHome}
-        className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-[#D84315] hover:underline cursor-pointer"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        <span>Back to Explore</span>
-      </button>
-
+    <section className="mx-auto max-w-[960px] px-4 py-8 sm:px-6 sm:py-12">
       <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-[#E6D7C3] bg-white shadow-md md:grid-cols-12">
         {/* Left Sacred Backdrop inspired by Figma Onboarding Screens */}
-        <div className="relative min-h-[220px] md:col-span-5">
+        <div className="relative min-h-[240px] md:col-span-5">
           <img
             src="/src/assets/images/tirupati_balaji_1795712131516.jpg"
             alt="Sacred Tirupati Balaji Temple"
             referrerPolicy="no-referrer"
             className="h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/20" />
           <div className="absolute inset-x-6 bottom-6 text-white">
-            <div className="text-xs font-semibold text-[#F5CFA0]">
-              Sacred Travel Companion
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#F5CFA0]">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Sacred Travel Companion</span>
             </div>
-            <h2 className="mt-1 font-display text-2xl font-bold leading-snug">
+            <h2 className="mt-1.5 font-display text-2xl font-bold leading-snug sm:text-3xl">
               Namaste to YatriGuide
             </h2>
-            <p className="mt-1 text-xs leading-relaxed text-white/90">
-              Book verified darshan, pure-veg stays, trains, and senior-care yatras across India in one easy place.
+            <p className="mt-2 text-xs leading-relaxed text-white/90">
+              Sign in or create your free pilgrim account to explore Jagannath Puri, Tirupati Balaji, Ayodhya, Dwarka, book darshan slots, and receive train e-tickets.
             </p>
           </div>
         </div>
@@ -184,10 +176,10 @@ export function AuthPage({
         {/* Right Clean White Sign-In / Sign-Up Card */}
         <div className="p-6 sm:p-8 md:col-span-7">
           <h1 className="font-display text-2xl font-bold text-[#241914] sm:text-3xl">
-            {mode === 'LOGIN' ? 'Sign In to YatriGuide' : 'Sign-Up for YatriGuide'}
+            {mode === 'LOGIN' ? 'Welcome Back — Sign In' : 'Create Your YatriGuide Account'}
           </h1>
           <p className="mt-1 text-xs text-[#685649]">
-            Enter your details once so your bookings, train berths, and e-tickets stay saved.
+            Please sign in or create an account first to open destinations, itineraries, and ticket bookings.
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl border border-[#E6D7C3] bg-[#FAF6EE] p-1">

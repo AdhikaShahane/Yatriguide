@@ -18,7 +18,6 @@ import {
   getTempleById,
   listBookingsForUser,
   listCircuits,
-  listRecentBookings,
   listTemples,
 } from './server/db.ts';
 import { dispatchTicketEmail } from './server/email.ts';
@@ -380,21 +379,19 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.get('/api/bookings', (req, res) => {
+  const user = getAuthUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ error: 'Please sign in to view your tickets.' });
+    return;
+  }
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (q.length > 0) {
     const matches = getBookingByPnrOrEmail(q);
     res.json({ bookings: matches });
     return;
   }
-  const user = getAuthUserFromRequest(req);
-  if (user) {
-    const userBookings = listBookingsForUser(user.id, user.email);
-    if (userBookings.length > 0) {
-      res.json({ bookings: userBookings });
-      return;
-    }
-  }
-  res.json({ bookings: listRecentBookings(10) });
+  const userBookings = listBookingsForUser(user.id, user.email);
+  res.json({ bookings: userBookings });
 });
 
 app.post('/api/bookings', async (req, res) => {
