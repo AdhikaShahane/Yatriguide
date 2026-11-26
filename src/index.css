@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-ivory: #faf6ee;
+    --surface-cream: #fffdf9;
+    --surface-sand: #f3ebdd;
+    --border-sand: #e6d7c3;
+    --ink-teak: #241914;
+    --ink-muted: #685649;
+    --sindoor-maroon: #6b1d1d;
+    --kesari-saffron: #d95d16;
+    --haldi-gold: #b87d14;
+    --tulasi-green: #1e6b47;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--bg-ivory);
+    color: var(--ink-teak);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg-ivory);
+    color: var(--ink-teak);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+}
+
+.font-mono-data {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Sacred carved hairline arch accent on top of featured frames */
+.sacred-top-rule {
+  border-top: 2px solid #b87d14;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+}

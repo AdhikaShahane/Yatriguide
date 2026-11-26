@@ -1,0 +1,6 @@
+{
+  "name": "TeerthSutra",
+  "description": "Sacred Hindu pilgrimage circuits, live darshan slots, train and hotel packages, personalized itineraries, and automated email ticketing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
